@@ -1,0 +1,63 @@
+# Dependencias
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Build y dist
+dist/
+build/
+.next/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Logs
+logs/
+*.log
+
+# Mongod
+.mongod/
+
+# MongoDB data
+data/
+*.db
+
+# Package manager lockfiles (opcional: comentar si quieres usar lockfiles en Git)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.cache/
+.env.test
