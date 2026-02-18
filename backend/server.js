@@ -16,6 +16,8 @@ const FRONTEND_URLS = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 
   .filter(Boolean);
 const PRIMARY_FRONTEND_URL = FRONTEND_URLS[0] || 'http://localhost:5173';
 const isProduction = process.env.NODE_ENV === 'production';
+const hasMongoUri = Boolean(process.env.MONGODB_URI);
+const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti';
 
 // ─── Correos permitidos ──────────────────────────────────────────────────────
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
@@ -27,13 +29,17 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || ALLOWED_EMAILS[0] || '').toLowerCase();
 
 // ─── MongoDB ─────────────────────────────────────────────────────────────────
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti';
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB conectado'))
-  .catch(err => {
-    console.error('❌ MongoDB error al iniciar:', err.message);
-    console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI en el deploy.');
-  });
+if (hasMongoUri || !isProduction) {
+  mongoose.connect(mongoUrl)
+    .then(() => console.log('✅ MongoDB conectado'))
+    .catch(err => {
+      console.error('❌ MongoDB error al iniciar:', err.message);
+      console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI en el deploy.');
+    });
+} else {
+  console.error('❌ MONGODB_URI no configurada en producción.');
+  console.error('⚠️ Se iniciará sin conexión a MongoDB; configura la variable en Railway.');
+}
 
 // ─── Middlewares ─────────────────────────────────────────────────────────────
 app.use(cors({
@@ -48,21 +54,37 @@ app.use(express.urlencoded({ extended: true }));
 
 app.set('trust proxy', 1);
 
-app.use(session({
+const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti',
-    ttl: 7 * 24 * 60 * 60
-  }),
   cookie: {
     secure: isProduction,
     httpOnly: true,
     sameSite: isProduction ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
-}));
+};
+
+if (hasMongoUri || !isProduction) {
+  try {
+    const mongoStore = MongoStore.create({
+      mongoUrl,
+      ttl: 7 * 24 * 60 * 60
+    });
+    mongoStore.on('error', (error) => {
+      console.error('❌ Error en session store de MongoDB:', error.message);
+    });
+    sessionConfig.store = mongoStore;
+  } catch (error) {
+    console.error('❌ No se pudo inicializar connect-mongo:', error.message);
+    console.error('⚠️ Se usará MemoryStore temporalmente. Revisa MONGODB_URI para producción.');
+  }
+} else {
+  console.error('⚠️ Session store en memoria por falta de MONGODB_URI.');
+}
+
+app.use(session(sessionConfig));
 
 // ─── Passport / Google OAuth ─────────────────────────────────────────────────
 const hasGoogleOAuth = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -193,6 +215,9 @@ server.on('error', (err) => {
 
 process.on('unhandledRejection', (reason, p) => {
   console.error('Unhandled Rejection at Promise', p, 'reason:', reason);
+  if (reason && reason.name === 'MongoServerSelectionError') {
+    console.error('⚠️ Rechazo no controlado de MongoDB detectado; verifica MONGODB_URI y red en Railway.');
+  }
 });
 
 process.on('uncaughtException', (err) => {
