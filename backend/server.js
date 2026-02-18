@@ -16,6 +16,7 @@ const FRONTEND_URLS = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 
   .filter(Boolean);
 const PRIMARY_FRONTEND_URL = FRONTEND_URLS[0] || 'http://localhost:5173';
 const isProduction = process.env.NODE_ENV === 'production';
+const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti';
 
 // ─── Correos permitidos ──────────────────────────────────────────────────────
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
@@ -27,8 +28,7 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || ALLOWED_EMAILS[0] || '').toLowerCase();
 
 // ─── MongoDB ─────────────────────────────────────────────────────────────────
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti';
-mongoose.connect(MONGO_URI)
+mongoose.connect(mongoUrl)
   .then(() => console.log('✅ MongoDB conectado'))
   .catch(err => {
     console.error('❌ MongoDB error al iniciar:', err.message);
@@ -48,21 +48,29 @@ app.use(express.urlencoded({ extended: true }));
 
 app.set('trust proxy', 1);
 
-app.use(session({
+const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti',
-    ttl: 7 * 24 * 60 * 60
-  }),
   cookie: {
     secure: isProduction,
     httpOnly: true,
     sameSite: isProduction ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
-}));
+};
+
+try {
+  sessionConfig.store = MongoStore.create({
+    mongoUrl,
+    ttl: 7 * 24 * 60 * 60
+  });
+} catch (error) {
+  console.error('❌ No se pudo inicializar connect-mongo:', error.message);
+  console.error('⚠️ Se usará MemoryStore temporalmente. Revisa MONGODB_URI para producción.');
+}
+
+app.use(session(sessionConfig));
 
 // ─── Passport / Google OAuth ─────────────────────────────────────────────────
 const hasGoogleOAuth = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);

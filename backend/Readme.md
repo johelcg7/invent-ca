@@ -175,7 +175,7 @@ Se recomienda usar **Google Drive** con links compartidos de solo lectura. El si
 ## 🚀 Deploy recomendado: Railway (backend) + Vercel (frontend)
 
 ### Backend en Railway
-1. Crear servicio desde la carpeta `backend/`.
+1. Crear servicio desde la carpeta `backend/` (o desde la raíz, pero usando el script `npm start` del root que ahora instala backend automáticamente con `postinstall`).
 2. Variables de entorno mínimas:
    - `MONGODB_URI`
    - `SESSION_SECRET`
