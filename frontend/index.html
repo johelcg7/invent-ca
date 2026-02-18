@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="api-base-url" content="" />
   <title>InventaTI — Gestión de Activos</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -501,8 +502,12 @@
 <div id="toast"></div>
 
 <script>
-const API='http://localhost:3001';
+const API = window.__API_BASE__
+  || document.querySelector('meta[name="api-base-url"]')?.content
+  || localStorage.getItem('API_BASE_URL')
+  || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : '');
 let currentView='dashboard',editingAssetId=null,editingCollabId=null,searchQ='',searchTimer=null;
+if(!API){console.warn('API base URL no configurada. Define window.__API_BASE__ o <meta name="api-base-url"> para producción.');}
 let currentUserRole='viewer'; // 'admin' | 'viewer'
 
 async function init(){

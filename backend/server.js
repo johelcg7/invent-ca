@@ -9,7 +9,13 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${PORT}`;
+const FRONTEND_URLS = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:5173')
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean);
+const PRIMARY_FRONTEND_URL = FRONTEND_URLS[0] || 'http://localhost:5173';
+const isProduction = process.env.NODE_ENV === 'production';
 
 // ─── Correos permitidos ──────────────────────────────────────────────────────
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
@@ -21,13 +27,42 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || ALLOWED_EMAILS[0] || '').toLowerCase();
 
 // ─── MongoDB ─────────────────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti')
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti';
+mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB conectado'))
-  .catch(err => { console.error('❌ MongoDB error:', err); process.exit(1); });
+  .catch(err => {
+    console.error('❌ MongoDB error al iniciar:', err.message);
+    console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI en el deploy.');
+  });
+
+
+const sessionCookie = {
+  secure: isProduction,
+  httpOnly: true,
+  sameSite: isProduction ? 'none' : 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000
+};
+
+let sessionStore;
+try {
+  sessionStore = MongoStore.create({
+    mongoUrl: MONGO_URI,
+    ttl: 7 * 24 * 60 * 60
+  });
+  sessionStore.on('error', (err) => {
+    console.error('❌ Mongo session store error:', err.message);
+  });
+} catch (err) {
+  console.error('❌ No se pudo inicializar MongoStore:', err.message);
+  console.error('⚠️ Usando MemoryStore temporalmente; configura MONGODB_URI para producción.');
+}
 
 // ─── Middlewares ─────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: (origin, callback) => {
+    if (!origin || FRONTEND_URLS.includes(origin)) return callback(null, true);
+    return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -39,42 +74,40 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti',
-    ttl: 7 * 24 * 60 * 60
-  }),
-  cookie: {
-    secure: false,
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  }
+  ...(sessionStore ? { store: sessionStore } : {}),
+  cookie: sessionCookie
 }));
 
 // ─── Passport / Google OAuth ─────────────────────────────────────────────────
-passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback'
-}, (accessToken, refreshToken, profile, done) => {
-  const email = profile.emails?.[0]?.value?.toLowerCase();
+const hasGoogleOAuth = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
-  // Verificar si el correo está en la lista blanca
-  if (!email || !ALLOWED_EMAILS.includes(email)) {
-    return done(null, false, { message: `Acceso denegado para ${email}. Contacte al administrador.` });
-  }
+if (hasGoogleOAuth) {
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL || `${APP_BASE_URL}/auth/google/callback`
+  }, (accessToken, refreshToken, profile, done) => {
+    const email = profile.emails?.[0]?.value?.toLowerCase();
 
-  // No se guarda en DB, solo se usa la sesión
-  const user = {
-    id: profile.id,
-    name: profile.displayName,
-    email,
-    photo: profile.photos?.[0]?.value,
-    // role: 'admin' o 'viewer'
-    role: email === ADMIN_EMAIL ? 'admin' : 'viewer'
-  };
-  return done(null, user);
-}));
+    // Verificar si el correo está en la lista blanca
+    if (!email || !ALLOWED_EMAILS.includes(email)) {
+      return done(null, false, { message: `Acceso denegado para ${email}. Contacte al administrador.` });
+    }
+
+    // No se guarda en DB, solo se usa la sesión
+    const user = {
+      id: profile.id,
+      name: profile.displayName,
+      email,
+      photo: profile.photos?.[0]?.value,
+      // role: 'admin' o 'viewer'
+      role: email === ADMIN_EMAIL ? 'admin' : 'viewer'
+    };
+    return done(null, user);
+  }));
+} else {
+  console.warn('⚠️ Google OAuth deshabilitado: faltan GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET');
+}
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
@@ -106,15 +139,15 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ─── Auth Routes ─────────────────────────────────────────────────────────────
-app.get('/auth/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-);
+app.get('/auth/google', (req, res, next) => {
+  if (!hasGoogleOAuth) return res.status(503).json({ error: 'Google OAuth no configurado en el backend' });
+  return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
 
-app.get('/auth/google/callback',
-  // Redirigir al root del frontend para que el SPA procese el estado (usa /?error=... para mostrar errores)
-  passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}/?error=acceso_denegado` }),
-  (req, res) => res.redirect(`${FRONTEND_URL}/`)
-);
+app.get('/auth/google/callback', (req, res, next) => {
+  if (!hasGoogleOAuth) return res.status(503).json({ error: 'Google OAuth no configurado en el backend' });
+  return passport.authenticate('google', { failureRedirect: `${PRIMARY_FRONTEND_URL}/?error=acceso_denegado` })(req, res, next);
+}, (req, res) => res.redirect(`${PRIMARY_FRONTEND_URL}/`));
 
 app.get('/auth/me', (req, res) => {
   if (!req.isAuthenticated()) return res.status(401).json({ authenticated: false });
@@ -130,14 +163,17 @@ app.use('/api/assets', require('./routes/assets'));
 app.use('/api/colaboradores', require('./routes/colaboradores'));
 
 // ─── Health check ─────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+app.get('/health', (req, res) => {
+  const mongoState = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown';
+  res.json({ status: 'ok', timestamp: new Date(), mongo: mongoState, oauth: hasGoogleOAuth ? 'configured' : 'missing_credentials' });
+});
 
-// ─── Root route (evita confusión con 404 en /) ───────────────────────────────
+// ─── Root route ───────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     app: 'InventaTI backend',
     status: 'ok',
-    frontend: FRONTEND_URL,
+    frontend: FRONTEND_URLS,
     docs: {
       health: '/health',
       authMe: '/auth/me'
@@ -153,8 +189,11 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`🌐 Frontends permitidos (CORS): ${FRONTEND_URLS.join(', ')}`);
   console.log(`📧 Correos autorizados: ${ALLOWED_EMAILS.join(', ') || 'NINGUNO - configura ALLOWED_EMAILS en .env'}`);
   console.log(`🔑 Admin definido: ${ADMIN_EMAIL || 'NINGUNO (set ADMIN_EMAIL en .env si quieres uno explícito)'}`);
+  console.log(`🔐 Google OAuth: ${hasGoogleOAuth ? 'configurado' : 'NO configurado'}`);
+  console.log(`🗄️ Session store: ${sessionStore ? 'MongoStore' : 'MemoryStore (fallback)'}`);
 });
 
 server.on('error', (err) => {

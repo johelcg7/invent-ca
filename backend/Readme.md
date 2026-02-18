@@ -32,6 +32,7 @@ asset-manager/
 - Node.js 18+
 - MongoDB local o MongoDB Atlas
 - Cuenta de Google Cloud Console
+- (Deploy) Railway para backend y Vercel para frontend
 
 ### 2. Instalar dependencias del backend
 ```bash
@@ -54,8 +55,10 @@ cp .env.example .env
 3. Habilitar **Google+ API** o **People API**
 4. Crear credencial → **OAuth 2.0 Client ID** → tipo **Web Application**
 5. Agregar URI de redirección autorizado:
-   - `http://localhost:3001/auth/google/callback` (desarrollo)
+   - `http://localhost:3001/auth/google/callback` (desarrollo por defecto)
    - `https://tudominio.com/auth/google/callback` (producción)
+
+> Si cambias el puerto (`PORT`) o dominio (`APP_BASE_URL`), actualiza también el callback en Google.
 6. Copiar **Client ID** y **Client Secret** al `.env`
 
 ### 5. Configurar correos autorizados en `.env`
@@ -70,22 +73,18 @@ cd backend
 node seed.js ../Inventario_de_Activos_TI___CA.xlsx
 ```
 
-### 7. Iniciar el backend
+### 7. Iniciar backend (local)
 ```bash
 cd backend
-npm run dev    # desarrollo (nodemon)
+npm run dev
 # o
-npm start      # producción
+npm start
 ```
 
-### 8. Abrir el frontend
-Abre `frontend/index.html` en tu navegador, o sirve con cualquier servidor estático:
+### 8. Iniciar frontend (local)
+Abre `frontend/index.html` o sírvelo en otro puerto:
 ```bash
-# Con Python
 cd frontend && python3 -m http.server 5173
-
-# Con npx
-npx serve frontend -p 5173
 ```
 
 Visita: http://localhost:5173
@@ -97,8 +96,8 @@ Visita: http://localhost:5173
 
 Si te aparece **404**, revisa esto:
 
-1. `http://localhost:3001` es el **backend** (API), no la app visual.
-2. El frontend se abre en `http://localhost:5173` cuando lo levantas con `python3 -m http.server 5173`.
+1. `http://localhost:3001` es el backend (API).
+2. El frontend local normalmente va en `http://localhost:5173` (o el puerto que uses).
 3. Verifica backend con `http://localhost:3001/health` (debe responder JSON).
 
 ## 🔐 Flujo de autenticación
@@ -173,10 +172,47 @@ Se recomienda usar **Google Drive** con links compartidos de solo lectura. El si
 
 ---
 
-## 🚀 Deploy en producción
+## 🚀 Deploy recomendado: Railway (backend) + Vercel (frontend)
 
-1. Cambiar `FRONTEND_URL` y `GOOGLE_CALLBACK_URL` al dominio real
-2. Agregar `secure: true` en cookies (requiere HTTPS)
-3. Usar `NODE_ENV=production`
-4. Servir el frontend con Nginx o similar
-5. Usar MongoDB Atlas para la base de datos
+### Backend en Railway
+1. Crear servicio desde la carpeta `backend/`.
+2. Variables de entorno mínimas:
+   - `MONGODB_URI`
+   - `SESSION_SECRET`
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `ALLOWED_EMAILS`
+   - `ADMIN_EMAIL`
+   - `FRONTEND_URLS=https://TU-FRONTEND.vercel.app`
+   - `APP_BASE_URL=https://TU-BACKEND.up.railway.app`
+   - `GOOGLE_CALLBACK_URL=https://TU-BACKEND.up.railway.app/auth/google/callback`
+3. Railway inyecta `PORT`; no lo fijes manualmente.
+4. Confirmar `https://TU-BACKEND.up.railway.app/health`.
+5. Si el repo se despliega desde la raíz (sin Root Directory), este proyecto ya ejecuta `postinstall` para instalar `backend/node_modules` automáticamente.
+
+
+### Si Railway muestra "Application failed to respond"
+Revisa en orden:
+1. El servicio está apuntando a la carpeta `backend/` (Root Directory).
+2. Variables mínimas configuradas: `MONGODB_URI`, `SESSION_SECRET`, `FRONTEND_URLS`, `APP_BASE_URL`.
+3. Si aún no configuras Google OAuth, el backend igual debe levantar; `/health` responderá con `oauth: "missing_credentials"`.
+4. Valida logs de arranque en Railway para detectar variables vacías o URI inválidas.
+5. Si `MONGODB_URI` falla, el backend seguirá arriba con `MemoryStore` temporal (solo para diagnóstico, no recomendado para producción).
+
+### Frontend en Vercel
+1. Crear proyecto con **Root Directory** en `frontend/`.
+2. Publicar como sitio estático (sin build command).
+3. Configurar base API en producción con alguna de estas opciones:
+   - Definir `window.__API_BASE__` antes del script principal, o
+   - Completar `<meta name="api-base-url" content="https://TU-BACKEND.up.railway.app">`, o
+   - Guardar en navegador: `localStorage.setItem('API_BASE_URL','https://TU-BACKEND.up.railway.app')`.
+4. En Google OAuth agrega estos URLs autorizados:
+   - Origen JS: `https://TU-FRONTEND.vercel.app`
+   - Callback: `https://TU-BACKEND.up.railway.app/auth/google/callback`
+
+### Cookies y sesión cross-domain
+Cuando frontend y backend están en dominios distintos (Vercel + Railway), el backend usa en producción:
+- `cookie.secure=true`
+- `cookie.sameSite='none'`
+
+Esto es necesario para que la sesión funcione con `credentials: 'include'`.
