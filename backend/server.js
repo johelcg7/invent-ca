@@ -82,6 +82,29 @@ passport.deserializeUser((user, done) => done(null, user));
 app.use(passport.initialize());
 app.use(passport.session());
 
+// --- Dev helpers: sesión de prueba (solo fuera de producción) -----------------
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/dev/login', (req, res) => {
+    const email = (req.query.email || ADMIN_EMAIL || ALLOWED_EMAILS[0] || 'dev@local').toLowerCase();
+    const role = req.query.role || (email === ADMIN_EMAIL ? 'admin' : 'admin');
+    const user = {
+      id: `dev-${Date.now()}`,
+      name: 'Usuario Dev',
+      email,
+      photo: null,
+      role
+    };
+    req.login(user, (err) => {
+      if (err) return res.status(500).json({ error: 'No se pudo crear sesión de prueba' });
+      return res.json({ message: 'Sesión de prueba creada', user });
+    });
+  });
+
+  app.get('/dev/logout', (req, res) => {
+    req.logout(() => res.json({ message: 'Sesión de prueba cerrada' }));
+  });
+}
+
 // ─── Auth Routes ─────────────────────────────────────────────────────────────
 app.get('/auth/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
@@ -128,6 +151,27 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Servidor en puerto ${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`📧 Correos autorizados: ${ALLOWED_EMAILS.join(', ') || 'NINGUNO - configura ALLOWED_EMAILS en .env'}`);
+  console.log(`🔑 Admin definido: ${ADMIN_EMAIL || 'NINGUNO (set ADMIN_EMAIL en .env si quieres uno explícito)'}`);
+});
+
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`❌ Error: puerto ${PORT} en uso.`);
+    console.error(`Sugerencia: mata el proceso que usa ese puerto o ejecuta: npx kill-port ${PORT}`);
+    process.exit(1);
+  }
+  console.error('Server error:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, p) => {
+  console.error('Unhandled Rejection at Promise', p, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception thrown:', err);
+  process.exit(1);
 });
