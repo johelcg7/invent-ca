@@ -9,7 +9,13 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const APP_BASE_URL = process.env.APP_BASE_URL || `http://localhost:${PORT}`;
+const FRONTEND_URLS = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:5173')
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean);
+const PRIMARY_FRONTEND_URL = FRONTEND_URLS[0] || 'http://localhost:5173';
+const isProduction = process.env.NODE_ENV === 'production';
 
 // ─── Correos permitidos ──────────────────────────────────────────────────────
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
@@ -27,7 +33,10 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/inventari
 
 // ─── Middlewares ─────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: FRONTEND_URL,
+  origin: (origin, callback) => {
+    if (!origin || FRONTEND_URLS.includes(origin)) return callback(null, true);
+    return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -44,9 +53,9 @@ app.use(session({
     ttl: 7 * 24 * 60 * 60
   }),
   cookie: {
-    secure: false,
+    secure: isProduction,
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
@@ -55,7 +64,7 @@ app.use(session({
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3001/auth/google/callback'
+  callbackURL: process.env.GOOGLE_CALLBACK_URL || `${APP_BASE_URL}/auth/google/callback`
 }, (accessToken, refreshToken, profile, done) => {
   const email = profile.emails?.[0]?.value?.toLowerCase();
 
@@ -112,8 +121,8 @@ app.get('/auth/google',
 
 app.get('/auth/google/callback',
   // Redirigir al root del frontend para que el SPA procese el estado (usa /?error=... para mostrar errores)
-  passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}/?error=acceso_denegado` }),
-  (req, res) => res.redirect(`${FRONTEND_URL}/`)
+  passport.authenticate('google', { failureRedirect: `${PRIMARY_FRONTEND_URL}/?error=acceso_denegado` }),
+  (req, res) => res.redirect(`${PRIMARY_FRONTEND_URL}/`)
 );
 
 app.get('/auth/me', (req, res) => {
@@ -132,12 +141,12 @@ app.use('/api/colaboradores', require('./routes/colaboradores'));
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
-// ─── Root route (evita confusión con 404 en /) ───────────────────────────────
+// ─── Root route ───────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     app: 'InventaTI backend',
     status: 'ok',
-    frontend: FRONTEND_URL,
+    frontend: FRONTEND_URLS,
     docs: {
       health: '/health',
       authMe: '/auth/me'
@@ -153,6 +162,7 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`🌐 Frontends permitidos (CORS): ${FRONTEND_URLS.join(', ')}`);
   console.log(`📧 Correos autorizados: ${ALLOWED_EMAILS.join(', ') || 'NINGUNO - configura ALLOWED_EMAILS en .env'}`);
   console.log(`🔑 Admin definido: ${ADMIN_EMAIL || 'NINGUNO (set ADMIN_EMAIL en .env si quieres uno explícito)'}`);
 });
