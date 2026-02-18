@@ -201,6 +201,9 @@ server.on('error', (err) => {
 
 process.on('unhandledRejection', (reason, p) => {
   console.error('Unhandled Rejection at Promise', p, 'reason:', reason);
+  if (reason && reason.name === 'MongoServerSelectionError') {
+    console.error('⚠️ Rechazo no controlado de MongoDB detectado; verifica MONGODB_URI y red en Railway.');
+  }
 });
 
 process.on('uncaughtException', (err) => {
