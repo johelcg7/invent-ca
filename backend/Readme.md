@@ -188,16 +188,6 @@ Se recomienda usar **Google Drive** con links compartidos de solo lectura. El si
    - `GOOGLE_CALLBACK_URL=https://TU-BACKEND.up.railway.app/auth/google/callback`
 3. Railway inyecta `PORT`; no lo fijes manualmente.
 4. Confirmar `https://TU-BACKEND.up.railway.app/health`.
-5. Si el repo se despliega desde la raíz (sin Root Directory), este proyecto ya ejecuta `postinstall` para instalar `backend/node_modules` automáticamente.
-
-
-### Si Railway muestra "Application failed to respond"
-Revisa en orden:
-1. El servicio está apuntando a la carpeta `backend/` (Root Directory).
-2. Variables mínimas configuradas: `MONGODB_URI`, `SESSION_SECRET`, `FRONTEND_URLS`, `APP_BASE_URL`.
-3. Si aún no configuras Google OAuth, el backend igual debe levantar; `/health` responderá con `oauth: "missing_credentials"`.
-4. Valida logs de arranque en Railway para detectar variables vacías o URI inválidas.
-5. Si `MONGODB_URI` falla, el backend seguirá arriba con `MemoryStore` temporal (solo para diagnóstico, no recomendado para producción).
 
 ### Frontend en Vercel
 1. Crear proyecto con **Root Directory** en `frontend/`.

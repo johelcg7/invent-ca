@@ -35,28 +35,6 @@ mongoose.connect(MONGO_URI)
     console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI en el deploy.');
   });
 
-
-const sessionCookie = {
-  secure: isProduction,
-  httpOnly: true,
-  sameSite: isProduction ? 'none' : 'lax',
-  maxAge: 7 * 24 * 60 * 60 * 1000
-};
-
-let sessionStore;
-try {
-  sessionStore = MongoStore.create({
-    mongoUrl: MONGO_URI,
-    ttl: 7 * 24 * 60 * 60
-  });
-  sessionStore.on('error', (err) => {
-    console.error('❌ Mongo session store error:', err.message);
-  });
-} catch (err) {
-  console.error('❌ No se pudo inicializar MongoStore:', err.message);
-  console.error('⚠️ Usando MemoryStore temporalmente; configura MONGODB_URI para producción.');
-}
-
 // ─── Middlewares ─────────────────────────────────────────────────────────────
 app.use(cors({
   origin: (origin, callback) => {
@@ -74,8 +52,16 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
-  ...(sessionStore ? { store: sessionStore } : {}),
-  cookie: sessionCookie
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti',
+    ttl: 7 * 24 * 60 * 60
+  }),
+  cookie: {
+    secure: isProduction,
+    httpOnly: true,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  }
 }));
 
 // ─── Passport / Google OAuth ─────────────────────────────────────────────────
@@ -193,7 +179,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`📧 Correos autorizados: ${ALLOWED_EMAILS.join(', ') || 'NINGUNO - configura ALLOWED_EMAILS en .env'}`);
   console.log(`🔑 Admin definido: ${ADMIN_EMAIL || 'NINGUNO (set ADMIN_EMAIL en .env si quieres uno explícito)'}`);
   console.log(`🔐 Google OAuth: ${hasGoogleOAuth ? 'configurado' : 'NO configurado'}`);
-  console.log(`🗄️ Session store: ${sessionStore ? 'MongoStore' : 'MemoryStore (fallback)'}`);
 });
 
 server.on('error', (err) => {
