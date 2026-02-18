@@ -16,9 +16,7 @@ const FRONTEND_URLS = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 
   .filter(Boolean);
 const PRIMARY_FRONTEND_URL = FRONTEND_URLS[0] || 'http://localhost:5173';
 const isProduction = process.env.NODE_ENV === 'production';
-const localMongoUrl = 'mongodb://127.0.0.1:27017/inventario_ti';
-const mongoUrl = process.env.MONGODB_URI || (!isProduction ? localMongoUrl : '');
-const hasMongoUri = Boolean(mongoUrl);
+const mongoUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/inventario_ti';
 
 // ─── Correos permitidos ──────────────────────────────────────────────────────
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
@@ -30,17 +28,12 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || ALLOWED_EMAILS[0] || '').toLowerCase();
 
 // ─── MongoDB ─────────────────────────────────────────────────────────────────
-if (hasMongoUri || !isProduction) {
-  mongoose.connect(mongoUrl)
-    .then(() => console.log('✅ MongoDB conectado'))
-    .catch(err => {
-      console.error('❌ MongoDB error al iniciar:', err.message);
-      console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI (Mongo Atlas/Railway) en el deploy.');
-    });
-} else {
-  console.error('❌ MONGODB_URI no configurada en producción.');
-  console.error('⚠️ Se iniciará sin conexión a MongoDB; usa un cluster externo (Atlas/Railway) y configura la variable en Railway.');
-}
+mongoose.connect(mongoUrl)
+  .then(() => console.log('✅ MongoDB conectado'))
+  .catch(err => {
+    console.error('❌ MongoDB error al iniciar:', err.message);
+    console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI en el deploy.');
+  });
 
 // ─── Middlewares ─────────────────────────────────────────────────────────────
 app.use(cors({
@@ -67,22 +60,14 @@ const sessionConfig = {
   }
 };
 
-if (hasMongoUri || !isProduction) {
-  try {
-    const mongoStore = MongoStore.create({
-      mongoUrl,
-      ttl: 7 * 24 * 60 * 60
-    });
-    mongoStore.on('error', (error) => {
-      console.error('❌ Error en session store de MongoDB:', error.message);
-    });
-    sessionConfig.store = mongoStore;
-  } catch (error) {
-    console.error('❌ No se pudo inicializar connect-mongo:', error.message);
-    console.error('⚠️ Se usará MemoryStore temporalmente. Revisa MONGODB_URI para producción.');
-  }
-} else {
-  console.error('⚠️ Session store en memoria por falta de MONGODB_URI.');
+try {
+  sessionConfig.store = MongoStore.create({
+    mongoUrl,
+    ttl: 7 * 24 * 60 * 60
+  });
+} catch (error) {
+  console.error('❌ No se pudo inicializar connect-mongo:', error.message);
+  console.error('⚠️ Se usará MemoryStore temporalmente. Revisa MONGODB_URI para producción.');
 }
 
 app.use(session(sessionConfig));
