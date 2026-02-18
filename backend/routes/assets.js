@@ -4,6 +4,12 @@ const Asset = require('../models/Asset');
 const Historial = require('../models/Historial');
 const { ensureAuthenticated, requireAdmin } = require('../middleware/auth');
 
+const buildSafeRegex = (term = '') => {
+  const normalized = String(term).trim().slice(0, 80);
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, 'i');
+};
+
 // Todas las rutas requieren usuario autenticado
 router.use(ensureAuthenticated);
 
@@ -16,12 +22,13 @@ router.get('/', async (req, res) => {
     if (area) filter.area = area;
     if (tipoEquipo) filter.tipoEquipo = tipoEquipo;
     if (search) {
+      const safeSearchRegex = buildSafeRegex(search);
       filter.$or = [
-        { id: { $regex: search, $options: 'i' } },
-        { marca: { $regex: search, $options: 'i' } },
-        { modelo: { $regex: search, $options: 'i' } },
-        { usuarioAsignado: { $regex: search, $options: 'i' } },
-        { numeroSerie: { $regex: search, $options: 'i' } }
+        { id: safeSearchRegex },
+        { marca: safeSearchRegex },
+        { modelo: safeSearchRegex },
+        { usuarioAsignado: safeSearchRegex },
+        { numeroSerie: safeSearchRegex }
       ];
     }
     const [assets, total] = await Promise.all([

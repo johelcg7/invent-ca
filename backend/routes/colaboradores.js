@@ -4,6 +4,12 @@ const Colaborador = require('../models/Colaborador');
 const Asset = require('../models/Asset');
 const { ensureAuthenticated, requireAdmin } = require('../middleware/auth');
 
+const buildSafeRegex = (term = '') => {
+  const normalized = String(term).trim().slice(0, 80);
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escaped, 'i');
+};
+
 // Require authentication for all collaborators endpoints
 router.use(ensureAuthenticated);
 
@@ -15,10 +21,11 @@ router.get('/', async (req, res) => {
     if (area) filter.area = area;
     if (estado) filter.estado = estado;
     if (search) {
+      const safeSearchRegex = buildSafeRegex(search);
       filter.$or = [
-        { nombreCompleto: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { idEmpleado: { $regex: search, $options: 'i' } }
+        { nombreCompleto: safeSearchRegex },
+        { email: safeSearchRegex },
+        { idEmpleado: safeSearchRegex }
       ];
     }
     const colaboradores = await Colaborador.find(filter).sort({ nombreCompleto: 1 });
