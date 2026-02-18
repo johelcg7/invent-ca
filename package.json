@@ -1,0 +1,9 @@
+{
+  "name": "invent-ca",
+  "private": true,
+  "scripts": {
+    "start": "npm run start --prefix backend",
+    "dev": "npm run dev --prefix backend",
+    "install:all": "npm install --prefix backend"
+  }
+}
