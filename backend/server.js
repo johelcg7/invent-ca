@@ -109,6 +109,19 @@ app.use('/api/colaboradores', require('./routes/colaboradores'));
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
+// ─── Root route (evita confusión con 404 en /) ───────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    app: 'InventaTI backend',
+    status: 'ok',
+    frontend: FRONTEND_URL,
+    docs: {
+      health: '/health',
+      authMe: '/auth/me'
+    }
+  });
+});
+
 // ─── Error handler ───────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);

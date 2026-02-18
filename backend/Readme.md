@@ -92,6 +92,15 @@ Visita: http://localhost:5173
 
 ---
 
+
+## 🧯 Solución rápida: error 404
+
+Si te aparece **404**, revisa esto:
+
+1. `http://localhost:3001` es el **backend** (API), no la app visual.
+2. El frontend se abre en `http://localhost:5173` cuando lo levantas con `python3 -m http.server 5173`.
+3. Verifica backend con `http://localhost:3001/health` (debe responder JSON).
+
 ## 🔐 Flujo de autenticación
 
 ```
