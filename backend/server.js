@@ -115,8 +115,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-  console.log(`📧 Correos autorizados: ${ALLOWED_EMAILS.join(', ') || 'NINGUNO - configura ALLOWED_EMAILS en .env'}`);
-  console.log(`🔑 Admin definido: ${ADMIN_EMAIL || 'NINGUNO (set ADMIN_EMAIL en .env si quieres uno explícito)'}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Servidor en puerto ${PORT}`);
 });
