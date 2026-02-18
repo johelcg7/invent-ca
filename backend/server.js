@@ -159,7 +159,13 @@ app.use('/api/colaboradores', require('./routes/colaboradores'));
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   const mongoState = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown';
-  res.json({ status: 'ok', timestamp: new Date(), mongo: mongoState, oauth: hasGoogleOAuth ? 'configured' : 'missing_credentials' });
+  res.json({
+    status: 'ok',
+    timestamp: new Date(),
+    mongo: mongoState,
+    mongoConfigured: Boolean(process.env.MONGODB_URI),
+    oauth: hasGoogleOAuth ? 'configured' : 'missing_credentials'
+  });
 });
 
 // ─── Root route ───────────────────────────────────────────────────────────────

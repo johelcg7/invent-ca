@@ -189,6 +189,22 @@ Se recomienda usar **Google Drive** con links compartidos de solo lectura. El si
 3. Railway inyecta `PORT`; no lo fijes manualmente.
 4. Confirmar `https://TU-BACKEND.up.railway.app/health`.
 
+
+
+### MongoDB en producción (NO local)
+En Railway **no debes usar** `mongodb://localhost:27017/...` porque ese Mongo local no existe en tu contenedor de app.
+
+1. Crea un cluster en **MongoDB Atlas** (recomendado) o usa un servicio Mongo administrado.
+2. En Atlas, crea un usuario y habilita acceso de red (`0.0.0.0/0` temporalmente para pruebas, luego restringe).
+3. Copia tu connection string, por ejemplo:
+   - `mongodb+srv://USUARIO:PASS@cluster0.xxxxx.mongodb.net/inventario_ti?retryWrites=true&w=majority`
+4. En Railway > tu servicio > Variables, agrega:
+   - `MONGODB_URI=<tu connection string de Atlas>`
+5. Redeploy y verifica:
+   - `https://TU-BACKEND.up.railway.app/health` → debe mostrar `mongoConfigured: true`.
+
+Si `mongoConfigured` sale `false`, Railway no está leyendo tu variable `MONGODB_URI` (revisa nombre exacto y entorno).
+
 ### Frontend en Vercel
 1. Crear proyecto con **Root Directory** en `frontend/`.
 2. Publicar como sitio estático (sin build command).
