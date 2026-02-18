@@ -28,12 +28,17 @@ const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || ALLOWED_EMAILS[0] || '').toLowerCase();
 
 // ─── MongoDB ─────────────────────────────────────────────────────────────────
-mongoose.connect(mongoUrl)
-  .then(() => console.log('✅ MongoDB conectado'))
-  .catch(err => {
-    console.error('❌ MongoDB error al iniciar:', err.message);
-    console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI en el deploy.');
-  });
+if (hasMongoUri || !isProduction) {
+  mongoose.connect(mongoUrl)
+    .then(() => console.log('✅ MongoDB conectado'))
+    .catch(err => {
+      console.error('❌ MongoDB error al iniciar:', err.message);
+      console.error('⚠️ El servidor seguirá arriba para responder /health; revisa MONGODB_URI (Mongo Atlas/Railway) en el deploy.');
+    });
+} else {
+  console.error('❌ MONGODB_URI no configurada en producción.');
+  console.error('⚠️ Se iniciará sin conexión a MongoDB; usa un cluster externo (Atlas/Railway) y configura la variable en Railway.');
+}
 
 // ─── Middlewares ─────────────────────────────────────────────────────────────
 app.use(cors({
@@ -60,14 +65,22 @@ const sessionConfig = {
   }
 };
 
-try {
-  sessionConfig.store = MongoStore.create({
-    mongoUrl,
-    ttl: 7 * 24 * 60 * 60
-  });
-} catch (error) {
-  console.error('❌ No se pudo inicializar connect-mongo:', error.message);
-  console.error('⚠️ Se usará MemoryStore temporalmente. Revisa MONGODB_URI para producción.');
+if (hasMongoUri || !isProduction) {
+  try {
+    const mongoStore = MongoStore.create({
+      mongoUrl,
+      ttl: 7 * 24 * 60 * 60
+    });
+    mongoStore.on('error', (error) => {
+      console.error('❌ Error en session store de MongoDB:', error.message);
+    });
+    sessionConfig.store = mongoStore;
+  } catch (error) {
+    console.error('❌ No se pudo inicializar connect-mongo:', error.message);
+    console.error('⚠️ Se usará MemoryStore temporalmente. Revisa MONGODB_URI para producción.');
+  }
+} else {
+  console.error('⚠️ Session store en memoria por falta de MONGODB_URI.');
 }
 
 app.use(session(sessionConfig));
